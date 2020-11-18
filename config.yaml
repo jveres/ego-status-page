@@ -1,6 +1,6 @@
 settings:
   title: 'Status Page'
-  url: 'https://status-page.eidam.dev' # used for Slack messages
+  url: 'https://ego-status.jveres.workers.dev/' # used for Slack messages
   logo: logo-192x192.png # image in ./public/ folder
   daysInHistogram: 90 # number of days you want to display in histogram
 
@@ -16,7 +16,7 @@ settings:
 monitors:
   - id: ego-jveres-me # unique identifier
     name: ego.jveres.me
-    description: 'Ego graph frontend service' # default=empty
+    description: 'Frontend service' # default=empty
     url: 'https://ego.jveres.me' # URL to fetch
     method: GET # default=GET
     expectStatus: 200 # operational status, default=200
@@ -24,7 +24,7 @@ monitors:
 
   - id: egonet-fly-dev
     name: egonet.fly.dev
-    description: 'Ego graph network service'
+    description: 'Graph service'
     url: 'https://egonet.fly.dev'
     method: GET
     expectStatus: 200
