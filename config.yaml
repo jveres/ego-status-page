@@ -14,23 +14,17 @@ settings:
   dayInHistogramNotOperational: 'Some checks failed'
 
 monitors:
-  - id: workers-cloudflare-com # unique identifier
-    name: workers.cloudflare.com
-    description: 'You write code. They handle the rest.' # default=empty
-    url: 'https://workers.cloudflare.com/' # URL to fetch
+  - id: ego-jveres-me # unique identifier
+    name: ego.jveres.me
+    description: 'Ego graph frontend service' # default=empty
+    url: 'https://ego.jveres.me' # URL to fetch
     method: GET # default=GET
     expectStatus: 200 # operational status, default=200
     followRedirect: false # should fetch follow redirects, default=false
 
-  - id: www-cloudflare-com
-    name: www.cloudflare.com
-    description: 'Built for anything connected to the Internet.'
-    url: 'https://www.cloudflare.com'
-    method: GET
-    expectStatus: 200
-
-  - id: blog-cloudflare-com
-    name: The Cloudflare Blog
-    url: 'https://blog.cloudflare.com/'
+  - id: egonet-fly-dev
+    name: egonet.fly.dev
+    description: 'Ego graph network service'
+    url: 'https://egonet.fly.dev'
     method: GET
     expectStatus: 200
