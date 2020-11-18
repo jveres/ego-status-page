@@ -27,4 +27,4 @@ monitors:
     description: 'Graph service'
     url: 'https://egonet.fly.dev:10001/'
     method: GET
-    expectStatus: 200
+    expectStatus: 406
