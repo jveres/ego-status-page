@@ -25,6 +25,6 @@ monitors:
   - id: egonet-fly-dev
     name: egonet.fly.dev
     description: 'Graph service'
-    url: 'https://egonet.fly.dev'
+    url: 'https://egonet.fly.dev:10001'
     method: GET
     expectStatus: 200
