@@ -19,12 +19,13 @@ monitors:
     description: 'Public frontend'
     url: 'https://ego.jveres.me/'
     method: GET
-    expectStatus: 301
-    followRedirect: false
+    expectStatus: 200
+    followRedirect: true
 
   - id: egoweb-fly-dev
     name: egoweb.fly.dev
     description: 'Frontend service'
     url: 'https://egoweb.fly.dev/'
     method: GET
-    expectStatus: 301
+    expectStatus: 200
+    followRedirect: true
