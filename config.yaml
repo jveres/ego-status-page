@@ -16,15 +16,15 @@ settings:
 monitors:
   - id: ego-jveres-me # unique identifier
     name: ego.jveres.me
-    description: 'Public frontend' # default=empty
-    url: 'https://ego.jveres.me/' # URL to fetch
-    method: GET # default=GET
-    expectStatus: 200 # operational status, default=200
-    followRedirect: false # should fetch follow redirects, default=false
+    description: 'Public frontend'
+    url: 'https://ego.jveres.me/'
+    method: GET
+    expectStatus: 301
+    followRedirect: false
 
   - id: egoweb-fly-dev
     name: egoweb.fly.dev
     description: 'Frontend service'
     url: 'https://egoweb.fly.dev/'
     method: GET
-    expectStatus: 200
+    expectStatus: 301
