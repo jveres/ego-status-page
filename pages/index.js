@@ -1,139 +1,94 @@
-import Head from 'flareact/head'
-import MonitorHistogram from '../src/components/monitorHistogram'
-
-import {
-  getLastUpdate,
-  getMonitors,
-  getMonitorsHistory,
-  useKeyPress,
-} from '../src/functions/helpers'
-
-import config from '../config.yaml'
-import MonitorStatusLabel from '../src/components/monitorStatusLabel'
-import MonitorStatusHeader from '../src/components/monitorStatusHeader'
-import MonitorFilter from '../src/components/monitorFilter'
-
 import { Store } from 'laco'
 import { useStore } from 'laco-react'
+import Head from 'flareact/head'
 
-const MonitorStore = new Store(
-  {
-    monitors: config.monitors,
-    visible: config.monitors,
-    activeFilter: false
-  }
-)
+import { getKVMonitors, useKeyPress } from '../src/functions/helpers'
+import config from '../config.yaml'
+import MonitorCard from '../src/components/monitorCard'
+import MonitorFilter from '../src/components/monitorFilter'
+import MonitorStatusHeader from '../src/components/monitorStatusHeader'
+import ThemeSwitcher from '../src/components/themeSwitcher'
 
-const filterByTerm = (term) => MonitorStore.set(
-  state => ({ visible: state.monitors.filter((monitor) => monitor.name.toLowerCase().includes(term)) })
-)
+const MonitorStore = new Store({
+  monitors: config.monitors,
+  visible: config.monitors,
+  activeFilter: false,
+})
+
+const filterByTerm = (term) =>
+  MonitorStore.set((state) => ({
+    visible: state.monitors.filter((monitor) =>
+      monitor.name.toLowerCase().includes(term),
+    ),
+  }))
 
 export async function getEdgeProps() {
   // get KV data
-  const kvMonitors = await getMonitors()
-  const kvMonitorsFailedDays = await getMonitorsHistory()
-  const kvLastUpdate = await getLastUpdate()
-
-  // prepare data maps for components
-  let monitorsOperational = true
-  let kvMonitorsMap = {}
-  kvMonitors.forEach(x => {
-    kvMonitorsMap[x.metadata.id] = x.metadata
-    if (x.metadata.operational === false) monitorsOperational = false
-  })
-
-  // transform KV list to array of failed days
-  const kvMonitorsFailedDaysArray = kvMonitorsFailedDays.map(x => {
-    return x.name
-  })
+  const kvMonitors = await getKVMonitors()
 
   return {
     props: {
       config,
-      kvMonitorsMap,
-      kvMonitorsFailedDaysArray,
-      monitorsOperational,
-      kvLastUpdate,
+      kvMonitors: kvMonitors ? kvMonitors.monitors : {},
+      kvMonitorsLastUpdate: kvMonitors ? kvMonitors.lastUpdate : {},
     },
     // Revalidate these props once every x seconds
     revalidate: 5,
   }
 }
 
-export default function Index({
-  config,
-  kvMonitorsMap,
-  kvMonitorsFailedDaysArray,
-  monitorsOperational,
-  kvLastUpdate,
-}) {
+export default function Index({ config, kvMonitors, kvMonitorsLastUpdate }) {
   const state = useStore(MonitorStore)
   const slash = useKeyPress('/')
 
   return (
-    <div>
+    <div className="min-h-screen">
       <Head>
         <title>{config.settings.title}</title>
-        <link
-          rel="stylesheet"
-          href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.8.7/semantic.min.css"
-          crossOrigin="anonymous"
-        />
-        <link rel="stylesheet" href="./main.css" />
+        <link rel="stylesheet" href="./style.css" />
+        <script>
+          {`
+          function setTheme(theme) {
+            document.documentElement.classList.remove("dark", "light")
+            document.documentElement.classList.add(theme)
+            localStorage.theme = theme
+          }
+          (() => {
+            const query = window.matchMedia("(prefers-color-scheme: dark)")
+            query.addListener(() => {
+              setTheme(query.matches ? "dark" : "light")
+            })
+            if (["dark", "light"].includes(localStorage.theme)) {
+              setTheme(localStorage.theme)
+            } else {
+              setTheme(query.matches ? "dark" : "light")
+            }
+          })()
+          `}
+        </script>
       </Head>
-      <div className="ui basic segment container">
-        <div className="horizontal flex between">
-          <h1 className="ui huge marginless title header">
-            <img
-              className="ui middle aligned tiny image"
-              src={config.settings.logo}
-            />
-            {config.settings.title}
-          </h1>
-          <MonitorFilter
-            active={slash}
-            callback={filterByTerm}
-          />
+      <div className="container mx-auto px-4">
+        <div className="flex flex-row justify-between items-center p-4">
+          <div className="flex flex-row items-center">
+            <img className="h-8 w-auto" src={config.settings.logo} />
+            <h1 className="ml-4 text-3xl">{config.settings.title}</h1>
+          </div>
+          <div className="flex flex-row items-center">
+            {typeof window !== 'undefined' && <ThemeSwitcher />}
+            <MonitorFilter active={slash} callback={filterByTerm} />
+          </div>
         </div>
-        <MonitorStatusHeader
-          operational={monitorsOperational}
-          lastUpdate={kvLastUpdate}
-        />
+        <MonitorStatusHeader kvMonitorsLastUpdate={kvMonitorsLastUpdate} />
         {state.visible.map((monitor, key) => {
           return (
-            <div key={key} className="ui segment">
-              <div
-                className="ui horizontal flex between"
-                style={{ marginBottom: '8px' }}
-              >
-                <div className="ui marginless header">
-                  {monitor.description && (
-                    <span data-tooltip={monitor.description}>
-                      <i className="blue small info circle icon" />
-                    </span>
-                  )}
-                  <div className="content">{monitor.name}</div>
-                </div>
-                <MonitorStatusLabel
-                  kvMonitorsMap={kvMonitorsMap}
-                  monitor={monitor}
-                />
-              </div>
-
-              <MonitorHistogram
-                kvMonitorsFailedDaysArray={kvMonitorsFailedDaysArray}
-                monitor={monitor}
-                kvMonitor={kvMonitorsMap[monitor.id]}
-              />
-
-              <div className="horizontal flex between grey-text">
-                <div>{config.settings.daysInHistogram} days ago</div>
-                <div>Today</div>
-              </div>
-            </div>
+            <MonitorCard
+              key={key}
+              monitor={monitor}
+              data={kvMonitors[monitor.id]}
+            />
           )
         })}
-        <div className="horizontal flex between grey-text">
+        <div className="flex flex-row justify-between mt-4 text-sm">
           <div>
             Powered by{' '}
             <a href="https://workers.cloudflare.com/" target="_blank">

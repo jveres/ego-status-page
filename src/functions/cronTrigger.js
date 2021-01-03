@@ -1,11 +1,11 @@
 import config from '../../config.yaml'
 
 import {
-  setKV,
-  getKVWithMetadata,
-  gcMonitors,
-  getKV,
   notifySlack,
+  notifyTelegram,
+  getCheckLocation,
+  getKVMonitors,
+  setKVMonitors,
 } from './helpers'
 
 function getDate() {
@@ -13,9 +13,34 @@ function getDate() {
 }
 
 export async function processCronTrigger(event) {
+  // Get Worker PoP and save it to monitorsStateMetadata
+  const checkLocation = await getCheckLocation()
+  const checkDay = getDate()
+
+  // Get monitors state from KV
+  let monitorsState = await getKVMonitors()
+
+  // Create empty state objects if not exists in KV storage yet
+  if (!monitorsState) {
+    monitorsState = { lastUpdate: {}, monitors: {} }
+  }
+
+  // Reset default all monitors state to true
+  monitorsState.lastUpdate.allOperational = true
+
   for (const monitor of config.monitors) {
+    // Create default monitor state if does not exist yet
+    if (typeof monitorsState.monitors[monitor.id] === 'undefined') {
+      monitorsState.monitors[monitor.id] = {
+        firstCheck: checkDay,
+        lastCheck: {},
+        checks: {},
+      }
+    }
+
     console.log(`Checking ${monitor.name} ...`)
 
+    // Fetch the monitors URL
     const init = {
       method: monitor.method || 'GET',
       redirect: monitor.followRedirect ? 'follow' : 'manual',
@@ -24,54 +49,101 @@ export async function processCronTrigger(event) {
       },
     }
 
+    // Perform a check and measure time
+    const requestStartTime = Date.now()
     const checkResponse = await fetch(monitor.url, init)
-    const kvState = await getKVWithMetadata('s_' + monitor.id)
+    const requestTime = Math.round(Date.now() - requestStartTime)
 
-    // metadata from monitor settings
-    const newMetadata = {
-      operational: checkResponse.status === (monitor.expectStatus || 200),
-      id: monitor.id,
-      firstCheck: kvState.metadata ? kvState.metadata.firstCheck : getDate(),
+    // Determine whether operational and status changed
+    const monitorOperational =
+      checkResponse.status === (monitor.expectStatus || 200)
+    const monitorStatusChanged =
+      monitorsState.monitors[monitor.id].lastCheck.operational !==
+      monitorOperational
+
+    // Save monitor's last check response status
+    monitorsState.monitors[monitor.id].lastCheck = {
+      status: checkResponse.status,
+      statusText: checkResponse.statusText,
+      operational: monitorOperational,
     }
 
-    // write current status if status changed or for first time
+    // Send Slack message on monitor change
     if (
-      !kvState.metadata ||
-      kvState.metadata.operational !== newMetadata.operational
+      monitorStatusChanged &&
+      typeof SECRET_SLACK_WEBHOOK_URL !== 'undefined' &&
+      SECRET_SLACK_WEBHOOK_URL !== 'default-gh-action-secret'
     ) {
-      console.log('Saving changed state..')
+      event.waitUntil(notifySlack(monitor, monitorOperational))
+    }
 
-      // first try to notify Slack in case fetch() or other limit is reached
-      if (typeof SECRET_SLACK_WEBHOOK_URL !== 'undefined' && SECRET_SLACK_WEBHOOK_URL !== 'default-gh-action-secret') {
-        await notifySlack(monitor, newMetadata)
+    // Send Telegram message on monitor change
+    if (
+      monitorStatusChanged &&
+      typeof SECRET_TELEGRAM_API_TOKEN !== 'undefined' &&
+      SECRET_TELEGRAM_API_TOKEN !== 'default-gh-action-secret' &&
+      typeof SECRET_TELEGRAM_CHAT_ID !== 'undefined' &&
+      SECRET_TELEGRAM_CHAT_ID !== 'default-gh-action-secret'
+    ) {
+      event.waitUntil(notifyTelegram(monitor, monitorOperational))
+    }
+
+    // make sure checkDay exists in checks in cases when needed
+    if (
+      (config.settings.collectResponseTimes || !monitorOperational) &&
+      !monitorsState.monitors[monitor.id].checks.hasOwnProperty(checkDay)
+    ) {
+      monitorsState.monitors[monitor.id].checks[checkDay] = {
+        fails: 0,
+        res: {},
+      }
+    }
+
+    if (config.settings.collectResponseTimes && monitorOperational) {
+      // make sure location exists in current checkDay
+      if (
+        !monitorsState.monitors[monitor.id].checks[checkDay].res.hasOwnProperty(
+          checkLocation,
+        )
+      ) {
+        monitorsState.monitors[monitor.id].checks[checkDay].res[
+          checkLocation
+        ] = {
+          n: 0,
+          ms: 0,
+          a: 0,
+        }
       }
 
-      await setKV('s_' + monitor.id, null, newMetadata)
-    }
+      // increment number of checks and sum of ms
+      const no = ++monitorsState.monitors[monitor.id].checks[checkDay].res[
+        checkLocation
+      ].n
+      const ms = (monitorsState.monitors[monitor.id].checks[checkDay].res[
+        checkLocation
+      ].ms += requestTime)
 
-    // write daily status if monitor is not operational
-    if (!newMetadata.operational) {
-      // try to get failed daily status first as KV read is cheaper than write
-      const kvFailedDayStatusKey = 'h_' + monitor.id + '_' + getDate()
-      const kvFailedDayStatus = await getKV(kvFailedDayStatusKey)
+      // save new average ms
+      monitorsState.monitors[monitor.id].checks[checkDay].res[
+        checkLocation
+      ].a = Math.round(ms / no)
+    } else if (!monitorOperational) {
+      // Save allOperational to false
+      monitorsState.lastUpdate.allOperational = false
 
-      // write if not found
-      if (!kvFailedDayStatus) {
-        console.log('Saving new failed daily status..')
-        await setKV(kvFailedDayStatusKey, null)
+      // Increment failed checks, only on status change (maybe call it .incidents instead?)
+      if (monitorStatusChanged) {
+        monitorsState.monitors[monitor.id].checks[checkDay].fails++
       }
     }
   }
 
-  // save last check timestamp including PoP location
-  const res = await fetch('https://cloudflare-dns.com/dns-query', {
-    method: 'OPTIONS',
-  })
-  const loc = res.headers.get('cf-ray').split('-')[1]
-  await setKV('lastUpdate', Date.now(), { loc })
+  // Save last update information
+  monitorsState.lastUpdate.time = Date.now()
+  monitorsState.lastUpdate.loc = checkLocation
 
-  // gc monitor statuses
-  event.waitUntil(gcMonitors(config))
+  // Save monitorsState to KV storage
+  await setKVMonitors(monitorsState)
 
   return new Response('OK')
 }

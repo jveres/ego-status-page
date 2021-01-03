@@ -1,96 +1,41 @@
 import config from '../../config.yaml'
-import {useEffect, useState} from 'react'
+import { useEffect, useState } from 'react'
 
-export async function getMonitors() {
-  const monitors = await listKV('s_')
-  return monitors.keys
+const kvDataKey = 'monitors_data_v1_1'
+
+export async function getKVMonitors() {
+  // trying both to see performance difference
+  return KV_STATUS_PAGE.get(kvDataKey, 'json')
+  //return JSON.parse(await KV_STATUS_PAGE.get(kvDataKey, 'text'))
 }
 
-export async function getMonitorsHistory() {
-  const monitorsHistory = await listKV('h_', 300)
-  return monitorsHistory.keys
+export async function setKVMonitors(data) {
+  return setKV(kvDataKey, JSON.stringify(data))
 }
 
-export async function getLastUpdate() {
-  return await getKVWithMetadata('lastUpdate')
-}
-
-export async function listKV(prefix = '', cacheTtl = false) {
-  const cacheKey = 'list_' + prefix + '_' + process.env.BUILD_ID
-
-  if (cacheTtl) {
-    const cachedResponse = await getKV(cacheKey)
-    if (cachedResponse) {
-      return JSON.parse(cachedResponse)
-    }
-  }
-
-  let list = []
-  let cursor = null
-  let res = {}
-  do {
-    res = await KV_STATUS_PAGE.list({ prefix: prefix, cursor })
-    list = list.concat(res.keys)
-    cursor = res.cursor
-  } while (!res.list_complete)
-
-  if (cacheTtl) {
-    await setKV(cacheKey, JSON.stringify({ keys: list }), null, cacheTtl)
-  }
-  return { keys: list }
+const getOperationalLabel = (operational) => {
+  return operational
+    ? config.settings.monitorLabelOperational
+    : config.settings.monitorLabelNotOperational
 }
 
 export async function setKV(key, value, metadata, expirationTtl) {
   return KV_STATUS_PAGE.put(key, value, { metadata, expirationTtl })
 }
 
-export async function getKV(key, type = 'text') {
-  return KV_STATUS_PAGE.get(key, type)
-}
-
-export async function getKVWithMetadata(key) {
-  return KV_STATUS_PAGE.getWithMetadata(key)
-}
-
-export async function deleteKV(key) {
-  return KV_STATUS_PAGE.delete(key)
-}
-
-export async function gcMonitors(config) {
-  const checkKvPrefix = 's_'
-
-  const monitors = config.monitors.map(key => {
-    return key.id
-  })
-
-  const kvMonitors = await listKV(checkKvPrefix)
-  const kvState = kvMonitors.keys.map(key => {
-    return key.metadata.id
-  })
-
-  const keysForRemoval = kvState.filter(x => !monitors.includes(x))
-
-  for (const key of keysForRemoval) {
-    console.log('gc: deleting ' + checkKvPrefix + key)
-    await deleteKV(checkKvPrefix + key)
-  }
-}
-
-export async function notifySlack(monitor, newMetadata) {
+export async function notifySlack(monitor, operational) {
   const payload = {
     attachments: [
       {
-        color: newMetadata.operational ? '#36a64f' : '#f2c744',
+        color: operational ? '#36a64f' : '#f2c744',
         blocks: [
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `Monitor *${monitor.name}* changed status to *${
-                newMetadata.operational
-                  ? config.settings.monitorLabelOperational
-                  : config.settings.monitorLabelNotOperational
-              }*`,
+              text: `Monitor *${
+                monitor.name
+              }* changed status to *${getOperationalLabel(operational)}*`,
             },
           },
           {
@@ -98,9 +43,9 @@ export async function notifySlack(monitor, newMetadata) {
             elements: [
               {
                 type: 'mrkdwn',
-                text: `${
-                  newMetadata.operational ? ':white_check_mark:' : ':x:'
-                } \`${monitor.method ? monitor.method : "GET"} ${monitor.url}\` - :eyes: <${
+                text: `${operational ? ':white_check_mark:' : ':x:'} \`${
+                  monitor.method ? monitor.method : 'GET'
+                } ${monitor.url}\` - :eyes: <${
                   config.settings.url
                 }|Status Page>`,
               },
@@ -117,30 +62,58 @@ export async function notifySlack(monitor, newMetadata) {
   })
 }
 
+export async function notifyTelegram(monitor, operational) {
+  const text = `Monitor *${monitor.name.replace(
+    '-',
+    '\\-',
+  )}* changed status to *${getOperationalLabel(operational)}*
+  ${operational ? '✅' : '❌'} \`${monitor.method ? monitor.method : 'GET'} ${
+    monitor.url
+  }\` \\- 👀 [Status Page](${config.settings.url})`
+
+  const payload = new FormData()
+  payload.append('chat_id', SECRET_TELEGRAM_CHAT_ID)
+  payload.append('parse_mode', 'MarkdownV2')
+  payload.append('text', text)
+
+  const telegramUrl = `https://api.telegram.org/bot${SECRET_TELEGRAM_API_TOKEN}/sendMessage`
+  return fetch(telegramUrl, {
+    body: payload,
+    method: 'POST',
+  })
+}
+
 export function useKeyPress(targetKey) {
   const [keyPressed, setKeyPressed] = useState(false)
 
   function downHandler({ key }) {
     if (key === targetKey) {
-      setKeyPressed(true);
+      setKeyPressed(true)
     }
   }
 
   const upHandler = ({ key }) => {
     if (key === targetKey) {
-      setKeyPressed(false);
+      setKeyPressed(false)
     }
   }
 
   useEffect(() => {
-    window.addEventListener('keydown', downHandler);
-    window.addEventListener('keyup', upHandler);
+    window.addEventListener('keydown', downHandler)
+    window.addEventListener('keyup', upHandler)
 
     return () => {
-      window.removeEventListener('keydown', downHandler);
-      window.removeEventListener('keyup', upHandler);
-    };
+      window.removeEventListener('keydown', downHandler)
+      window.removeEventListener('keyup', upHandler)
+    }
   }, [])
 
   return keyPressed
+}
+
+export async function getCheckLocation() {
+  const res = await fetch('https://cloudflare-dns.com/dns-query', {
+    method: 'OPTIONS',
+  })
+  return res.headers.get('cf-ray').split('-')[1]
 }
