@@ -17,7 +17,7 @@ monitors:
   - id: ego-jveres-me # unique identifier
     name: ego.jveres.me
     description: 'Public frontend'
-    url: 'https://ego.jveres.me/'
+    url: 'https://ego.jveres.me/index.html'
     method: GET
     expectStatus: 200
     followRedirect: true
@@ -25,7 +25,7 @@ monitors:
   - id: egoweb-fly-dev
     name: egoweb.fly.dev
     description: 'Frontend service'
-    url: 'https://egoweb.fly.dev/'
+    url: 'https://egoweb.fly.dev/index.html'
     method: GET
     expectStatus: 200
     followRedirect: true
