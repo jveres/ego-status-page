@@ -14,7 +14,7 @@ settings:
   dayInHistogramNotOperational: ' incident(s)' # xx incident(s) recorded
 
 monitors:
-  - id: ego-jveres-me # unique identifier
+  - id: ego-jveres-me
     name: ego.jveres.me
     description: 'Public frontend'
     url: 'https://ego.jveres.me/index.html'
