@@ -17,7 +17,7 @@ monitors:
   - id: ego-jveres-me
     name: ego.jveres.me
     description: 'Egonet'
-    url: 'https://ego.jveres.me/index.html'
+    url: 'https://ego.jveres.me/'
     method: GET
     expectStatus: 200
     followRedirect: true
