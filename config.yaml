@@ -21,4 +21,3 @@ monitors:
     method: GET
     expectStatus: 200
     followRedirect: true
-   
