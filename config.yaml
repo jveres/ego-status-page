@@ -15,7 +15,7 @@ settings:
 
 monitors:
   - id: ego-jveres-me
-    name: ego.jveres.me
+    name: ego-jveres-me
     description: 'Egonet'
     url: 'https://ego.jveres.me/'
     method: GET
